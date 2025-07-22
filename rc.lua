@@ -367,7 +367,337 @@ globalkeys = gears.table.join(
     awful.key({ modkey } , "b", function () awful.spawn(terminal_cmd .. "bluetui") end,
               {description = "open the BlueTooth manager", group = "launcher"}),
     awful.key({ modkey, "Shift"} , "w", function () awful.spawn(terminal_cmd .. "nmtui") end,
-              {description = "open the Network manager", group = "launcher"})
+              {description = "open the Network manager", group = "launcher"}),
+
+    -- ThinkPad T14 Function Keys
+    -- Volume Control
+    awful.key({ }, "XF86AudioRaiseVolume",
+        function ()
+            awful.spawn("pactl set-sink-volume @DEFAULT_SINK@ +5%")
+            -- Show notification
+            awful.spawn.easy_async("pactl get-sink-volume @DEFAULT_SINK@", function(stdout)
+                local volume = stdout:match("(%d+)%%")
+                if volume then
+                    naughty.notify({
+                        title = "Volume",
+                        text = "Volume: " .. volume .. "%",
+                        timeout = 1,
+                        preset = naughty.config.presets.low
+                    })
+                end
+            end)
+        end,
+        {description = "increase volume", group = "media"}),
+
+    awful.key({ }, "XF86AudioLowerVolume",
+        function ()
+            awful.spawn("pactl set-sink-volume @DEFAULT_SINK@ -5%")
+            -- Show notification
+            awful.spawn.easy_async("pactl get-sink-volume @DEFAULT_SINK@", function(stdout)
+                local volume = stdout:match("(%d+)%%")
+                if volume then
+                    naughty.notify({
+                        title = "Volume",
+                        text = "Volume: " .. volume .. "%",
+                        timeout = 1,
+                        preset = naughty.config.presets.low
+                    })
+                end
+            end)
+        end,
+        {description = "decrease volume", group = "media"}),
+
+    awful.key({ }, "XF86AudioMute",
+        function ()
+            awful.spawn("pactl set-sink-mute @DEFAULT_SINK@ toggle")
+            -- Show notification
+            awful.spawn.easy_async("pactl get-sink-mute @DEFAULT_SINK@", function(stdout)
+                local muted = stdout:match("Mute: (%w+)")
+                naughty.notify({
+                    title = "Volume",
+                    text = muted == "yes" and "Muted" or "Unmuted",
+                    timeout = 1,
+                    preset = naughty.config.presets.low
+                })
+            end)
+        end,
+        {description = "toggle mute", group = "media"}),
+
+    -- Microphone Control
+    awful.key({ }, "XF86AudioMicMute",
+        function ()
+            awful.spawn("pactl set-source-mute @DEFAULT_SOURCE@ toggle")
+            awful.spawn.easy_async("pactl get-source-mute @DEFAULT_SOURCE@", function(stdout)
+                local muted = stdout:match("Mute: (%w+)")
+                naughty.notify({
+                    title = "Microphone",
+                    text = muted == "yes" and "Mic Muted" or "Mic Unmuted",
+                    timeout = 1,
+                    preset = naughty.config.presets.low
+                })
+            end)
+        end,
+        {description = "toggle microphone mute", group = "media"}),
+
+    -- Brightness Control
+    awful.key({ }, "XF86MonBrightnessUp",
+        function ()
+            awful.spawn("brightnessctl set +10%")
+            -- Show notification
+            awful.spawn.easy_async("brightnessctl get", function(current)
+                awful.spawn.easy_async("brightnessctl max", function(max)
+                    local percentage = math.floor((tonumber(current) / tonumber(max)) * 100)
+                    naughty.notify({
+                        title = "Brightness",
+                        text = "Brightness: " .. percentage .. "%",
+                        timeout = 1,
+                        preset = naughty.config.presets.low
+                    })
+                end)
+            end)
+        end,
+        {description = "increase brightness", group = "system"}),
+
+    awful.key({ }, "XF86MonBrightnessDown",
+        function ()
+            awful.spawn("brightnessctl set 10%-")
+            -- Show notification
+            awful.spawn.easy_async("brightnessctl get", function(current)
+                awful.spawn.easy_async("brightnessctl max", function(max)
+                    local percentage = math.floor((tonumber(current) / tonumber(max)) * 100)
+                    naughty.notify({
+                        title = "Brightness",
+                        text = "Brightness: " .. percentage .. "%",
+                        timeout = 1,
+                        preset = naughty.config.presets.low
+                    })
+                end)
+            end)
+        end,
+        {description = "decrease brightness", group = "system"}),
+
+    -- WiFi/Signals Toggle (F8 - ThinkPad specific) - Multi-modal control
+    -- Regular press: Control both WiFi and Bluetooth
+    awful.key({ }, "XF86WLAN",
+        function ()
+            -- Check current WiFi state
+            awful.spawn.easy_async("nmcli radio wifi", function(wifi_stdout)
+                awful.spawn.easy_async("bluetoothctl show", function(bt_stdout)
+                    local wifi_enabled = wifi_stdout:match("enabled")
+                    local bt_enabled = bt_stdout:match("Powered: yes")
+
+                    if wifi_enabled and bt_enabled then
+                        -- Both on, turn both off
+                        awful.spawn("nmcli radio wifi off")
+                        awful.spawn("bluetoothctl power off")
+                        naughty.notify({
+                            title = "Wireless",
+                            text = "WiFi & Bluetooth Disabled",
+                            timeout = 2,
+                            preset = naughty.config.presets.normal
+                        })
+                    elseif not wifi_enabled and not bt_enabled then
+                        -- Both off, turn both on
+                        awful.spawn("nmcli radio wifi on")
+                        awful.spawn("bluetoothctl power on")
+                        naughty.notify({
+                            title = "Wireless",
+                            text = "WiFi & Bluetooth Enabled",
+                            timeout = 2,
+                            preset = naughty.config.presets.normal
+                        })
+                    else
+                        -- Mixed state, turn both on
+                        awful.spawn("nmcli radio wifi on")
+                        awful.spawn("bluetoothctl power on")
+                        naughty.notify({
+                            title = "Wireless",
+                            text = "WiFi & Bluetooth Enabled",
+                            timeout = 2,
+                            preset = naughty.config.presets.normal
+                        })
+                    end
+                end)
+            end)
+        end,
+        {description = "toggle wifi and bluetooth", group = "system"}),
+
+    -- Shift + F8: Control WiFi only
+    awful.key({ "Shift" }, "XF86WLAN",
+        function ()
+            awful.spawn.easy_async("nmcli radio wifi", function(stdout)
+                if stdout:match("enabled") then
+                    awful.spawn("nmcli radio wifi off")
+                    naughty.notify({
+                        title = "WiFi Only",
+                        text = "WiFi Disabled",
+                        timeout = 2,
+                        preset = naughty.config.presets.normal
+                    })
+                else
+                    awful.spawn("nmcli radio wifi on")
+                    naughty.notify({
+                        title = "WiFi Only",
+                        text = "WiFi Enabled",
+                        timeout = 2,
+                        preset = naughty.config.presets.normal
+                    })
+                end
+            end)
+        end,
+        {description = "toggle wifi only", group = "system"}),
+
+    -- Ctrl + F8: Control Bluetooth only
+    awful.key({ "Control" }, "XF86WLAN",
+        function ()
+            awful.spawn.easy_async("bluetoothctl show", function(stdout)
+                if stdout:match("Powered: yes") then
+                    awful.spawn("bluetoothctl power off")
+                    naughty.notify({
+                        title = "Bluetooth Only",
+                        text = "Bluetooth Disabled",
+                        timeout = 2,
+                        preset = naughty.config.presets.normal
+                    })
+                else
+                    awful.spawn("bluetoothctl power on")
+                    naughty.notify({
+                        title = "Bluetooth Only",
+                        text = "Bluetooth Enabled",
+                        timeout = 2,
+                        preset = naughty.config.presets.normal
+                    })
+                end
+            end)
+        end,
+        {description = "toggle bluetooth only", group = "system"}),
+
+    -- Bluetooth Toggle (separate control for other machines)
+    awful.key({ }, "XF86Bluetooth",
+        function ()
+            awful.spawn.easy_async("bluetoothctl show", function(stdout)
+                if stdout:match("Powered: yes") then
+                    awful.spawn("bluetoothctl power off")
+                    naughty.notify({
+                        title = "Bluetooth",
+                        text = "Bluetooth Disabled",
+                        timeout = 2,
+                        preset = naughty.config.presets.normal
+                    })
+                else
+                    awful.spawn("bluetoothctl power on")
+                    naughty.notify({
+                        title = "Bluetooth",
+                        text = "Bluetooth Enabled",
+                        timeout = 2,
+                        preset = naughty.config.presets.normal
+                    })
+                end
+            end)
+        end,
+        {description = "toggle bluetooth only", group = "system"}),
+
+    -- Screen Lock
+    awful.key({ }, "XF86ScreenSaver",
+        function ()
+            awful.spawn("loginctl lock-session")
+        end,
+        {description = "lock screen", group = "system"}),
+
+    -- Display Toggle (External monitor)
+    awful.key({ }, "XF86Display",
+        function ()
+            awful.spawn("autorandr --change")
+            naughty.notify({
+                title = "Display",
+                text = "Switching display configuration",
+                timeout = 2,
+                preset = naughty.config.presets.normal
+            })
+        end,
+        {description = "toggle external display", group = "system"}),
+
+    -- Media Control
+    awful.key({ }, "XF86AudioPlay",
+        function () awful.spawn("playerctl play-pause") end,
+        {description = "play/pause media", group = "media"}),
+
+    awful.key({ }, "XF86AudioNext",
+        function () awful.spawn("playerctl next") end,
+        {description = "next track", group = "media"}),
+
+    awful.key({ }, "XF86AudioPrev",
+        function () awful.spawn("playerctl previous") end,
+        {description = "previous track", group = "media"}),
+
+    -- F9-F12 Custom ThinkPad Keys
+    -- F9 - Notifications (Message icon)
+    awful.key({ }, "XF86Messenger",
+        function ()
+            -- Toggle notification history/center
+            naughty.destroy_all_notifications()
+            naughty.notify({
+                title = "Notifications",
+                text = "Notification center opened\nRecent notifications cleared",
+                timeout = 2,
+                preset = naughty.config.presets.normal
+            })
+        end,
+        {description = "open notifications center", group = "system"}),
+
+    -- F10 - Start Media (Phone pickup icon)
+    awful.key({ }, "XF86Phone",
+        function ()
+            awful.spawn("playerctl play")
+            naughty.notify({
+                title = "Media",
+                text = "Media started",
+                timeout = 1,
+                preset = naughty.config.presets.low
+            })
+        end,
+        {description = "start media playback", group = "media"}),
+
+    -- F11 - Stop Media (Phone hangup icon)
+    awful.key({ }, "XF86PhoneHangup",
+        function ()
+            awful.spawn("playerctl stop")
+            naughty.notify({
+                title = "Media",
+                text = "Media stopped",
+                timeout = 1,
+                preset = naughty.config.presets.low
+            })
+        end,
+        {description = "stop media playback", group = "media"}),
+
+    -- F12 - Calculator (Star icon)
+    awful.key({ }, "XF86Favorites",
+        function ()
+            awful.spawn("gnome-calculator")
+        end,
+        {description = "open calculator", group = "launcher"}),
+
+    -- Power Management
+    awful.key({ }, "XF86Sleep",
+        function ()
+            awful.spawn("systemctl suspend")
+        end,
+        {description = "suspend system", group = "system"}),
+
+    -- Calculator (if XF86Calculator exists separately)
+    awful.key({ }, "XF86Calculator",
+        function ()
+            awful.spawn("gnome-calculator")
+        end,
+        {description = "open calculator", group = "launcher"}),
+
+    -- Home folder
+    awful.key({ }, "XF86Explorer",
+        function ()
+            awful.spawn(file_browser)
+        end,
+        {description = "open file manager", group = "launcher"})
 )
 
 clientkeys = gears.table.join(
