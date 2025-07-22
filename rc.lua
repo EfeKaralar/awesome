@@ -105,7 +105,7 @@ local themes = {
     "zenburn"          -- 15
 }
 
-local chosen_theme = themes[8]
+local chosen_theme = themes[4]
 -- local chosen_theme = "sky"
 local modkey       = "Mod4"
 local altkey       = "Mod1"

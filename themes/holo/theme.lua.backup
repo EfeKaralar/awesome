@@ -3,8 +3,6 @@
      Holo Awesome WM theme 3.0
      github.com/lcpz
 
-     Fixed for better battery, volume, and music widgets
-
 --]]
 
 local gears = require("gears")
@@ -12,7 +10,6 @@ local lain  = require("lain")
 local awful = require("awful")
 local wibox = require("wibox")
 local dpi   = require("beautiful.xresources").apply_dpi
-local naughty = require("naughty")
 
 local string, os = string, os
 local my_table = awful.util.table or gears.table -- 4.{0,1} compatibility
@@ -97,8 +94,7 @@ theme.titlebar_maximized_button_focus_inactive  = theme.default_dir.."/titlebar/
 theme.titlebar_maximized_button_normal_active   = theme.default_dir.."/titlebar/maximized_normal_active.png"
 theme.titlebar_maximized_button_focus_active    = theme.default_dir.."/titlebar/maximized_focus_active.png"
 
--- Use your terminal from rc.lua, fallback to original if needed
-theme.musicplr = string.format("%s -e ncmpcpp", awful.util.terminal or "kitty")
+theme.musicplr = string.format("%s -e ncmpcpp", awful.util.terminal)
 
 local markup = lain.util.markup
 local blue   = "#80CCE6"
@@ -126,147 +122,118 @@ theme.cal = lain.widget.cal({
     }
 })
 
--- IMPROVED MUSIC PLAYER - Works with playerctl (modern approach)
-local mpd_icon = wibox.widget.imagebox(theme.mpdl)
+-- Mail IMAP check
+--[[ to be set before use
+theme.mail = lain.widget.imap({
+    timeout  = 180,
+    server   = "server",
+    mail     = "mail",
+    password = "keyring get mail",
+    settings = function()
+        mail_notification_preset.fg = "#FFFFFF"
+        mail  = ""
+        count = ""
+
+        if mailcount > 0 then
+            mail = "Mail "
+            count = mailcount .. " "
+        end
+
+        widget:set_markup(markup.font(theme.font, markup(blue, mail) .. markup("#FFFFFF", count)))
+    end
+})
+--]]
+
+-- MPD
+local mpd_icon = awful.widget.launcher({ image = theme.mpdl, command = theme.musicplr })
 local prev_icon = wibox.widget.imagebox(theme.prev)
 local next_icon = wibox.widget.imagebox(theme.nex)
 local stop_icon = wibox.widget.imagebox(theme.stop)
 local pause_icon = wibox.widget.imagebox(theme.pause)
 local play_pause_icon = wibox.widget.imagebox(theme.play)
-
--- Create a simple music widget that works with playerctl
-local music_widget = wibox.widget.textbox()
-music_widget:set_markup(markup.font("Roboto 4", " ") .. markup.font(theme.taglist_font, " No Music Playing ") .. markup.font("Roboto 5", " "))
-
--- Function to update music info
-local function update_music_info()
-    awful.spawn.easy_async("playerctl metadata --format '{{ artist }} - {{ title }}'", function(stdout)
-        if stdout and stdout ~= "" and not stdout:match("No players found") then
-            local info = stdout:gsub("\n", ""):sub(1, 50) -- Limit length
-            music_widget:set_markup(markup.font("Roboto 4", " ") .. markup.font(theme.taglist_font, " " .. info .. " ") .. markup.font("Roboto 5", " "))
-        else
-            music_widget:set_markup(markup.font("Roboto 4", " ") .. markup.font(theme.taglist_font, " No Music ") .. markup.font("Roboto 5", " "))
-        end
-    end)
-
-    -- Update play/pause icon
-    awful.spawn.easy_async("playerctl status", function(stdout)
-        if stdout:match("Playing") then
+theme.mpd = lain.widget.mpd({
+    settings = function ()
+        if mpd_now.state == "play" then
+            mpd_now.artist = mpd_now.artist:upper():gsub("&.-;", string.lower)
+            mpd_now.title = mpd_now.title:upper():gsub("&.-;", string.lower)
+            widget:set_markup(markup.font("Roboto 4", " ")
+                              .. markup.font(theme.taglist_font,
+                              " " .. mpd_now.artist
+                              .. " - " ..
+                              mpd_now.title .. "  ") .. markup.font("Roboto 5", " "))
             play_pause_icon:set_image(theme.pause)
+        elseif mpd_now.state == "pause" then
+            widget:set_markup(markup.font("Roboto 4", " ") ..
+                              markup.font(theme.taglist_font, " MPD PAUSED  ") ..
+                              markup.font("Roboto 5", " "))
+            play_pause_icon:set_image(theme.play)
         else
+            widget:set_markup("")
             play_pause_icon:set_image(theme.play)
         end
-    end)
-end
-
--- Update music info every 5 seconds
-gears.timer {
-    timeout = 5,
-    call_now = true,
-    autostart = true,
-    callback = update_music_info
-}
-
-local musicbg = wibox.container.background(music_widget, theme.bg_focus, gears.shape.rectangle)
+    end
+})
+local musicbg = wibox.container.background(theme.mpd.widget, theme.bg_focus, gears.shape.rectangle)
 local musicwidget = wibox.container.margin(musicbg, dpi(0), dpi(0), dpi(5), dpi(5))
 
--- IMPROVED MUSIC CONTROLS - Work with any media player
 musicwidget:buttons(my_table.join(awful.button({ }, 1,
-function ()
-    awful.spawn("playerctl play-pause")
-    gears.timer.delayed_call(update_music_info)
-end)))
-
+function () awful.spawn(theme.musicplr) end)))
 prev_icon:buttons(my_table.join(awful.button({}, 1,
 function ()
-    awful.spawn("playerctl previous")
-    gears.timer.delayed_call(update_music_info)
+    os.execute("mpc prev")
+    theme.mpd.update()
 end)))
-
 next_icon:buttons(my_table.join(awful.button({}, 1,
 function ()
-    awful.spawn("playerctl next")
-    gears.timer.delayed_call(update_music_info)
+    os.execute("mpc next")
+    theme.mpd.update()
 end)))
-
 stop_icon:buttons(my_table.join(awful.button({}, 1,
 function ()
-    awful.spawn("playerctl stop")
-    gears.timer.delayed_call(update_music_info)
+    play_pause_icon:set_image(theme.play)
+    os.execute("mpc stop")
+    theme.mpd.update()
 end)))
-
 play_pause_icon:buttons(my_table.join(awful.button({}, 1,
 function ()
-    awful.spawn("playerctl play-pause")
-    gears.timer.delayed_call(update_music_info)
+    os.execute("mpc toggle")
+    theme.mpd.update()
 end)))
 
--- IMPROVED BATTERY - Faster updates and clickable
+-- Battery
 local bat = lain.widget.bat({
-    timeout = 10, -- Update every 10 seconds instead of default 30
     settings = function()
         bat_header = " Bat "
-        bat_p      = bat_now.perc .. "% "
+        bat_p      = bat_now.perc .. " "
         if bat_now.ac_status == 1 then
-            bat_p = bat_p .. "⚡ "
+            bat_p = bat_p .. "Plugged "
         end
         widget:set_markup(markup.font(theme.font, markup(blue, bat_header) .. bat_p))
     end
 })
 
--- Make battery widget clickable - shows detailed battery info
-bat.widget:buttons(my_table.join(awful.button({}, 1, function()
-    awful.spawn.easy_async("acpi -b", function(stdout)
-        naughty.notify({
-            title = "Battery Status",
-            text = stdout:gsub("\n$", ""), -- Remove trailing newline
-            timeout = 5,
-            preset = naughty.config.presets.normal
-        })
-    end)
-end)))
+-- / fs
+--[[ commented because it needs Gio/Glib >= 2.54
+theme.fs = lain.widget.fs({
+    notification_preset = { bg = theme.bg_normal, font = "Monospace 9" },
+})
+--]]
 
--- IMPROVED VOLUME - Uses PulseAudio for faster response
-local volume_widget = wibox.widget.textbox()
-local function update_volume()
-    awful.spawn.easy_async("pactl get-sink-volume @DEFAULT_SINK@", function(stdout)
-        local volume = stdout:match("(%d+)%%") or "0"
-        awful.spawn.easy_async("pactl get-sink-mute @DEFAULT_SINK@", function(mute_out)
-            local muted = mute_out:match("Mute: yes") and " 🔇" or ""
-            volume_widget:set_markup(markup.font(theme.font, markup(blue, " Vol ") .. volume .. "%" .. muted .. " "))
-        end)
-    end)
-end
-
--- Update volume immediately and every 2 seconds
-update_volume()
-gears.timer {
-    timeout = 2,
-    autostart = true,
-    callback = update_volume
-}
-
-local volumebg = wibox.container.background(volume_widget, theme.bg_focus, gears.shape.rectangle)
-local volumewidget = wibox.container.margin(volumebg, dpi(0), dpi(0), dpi(5), dpi(5))
-
--- Make volume widget clickable
-volumewidget:buttons(my_table.join(
-    awful.button({}, 1, function() -- Left click: toggle mute
-        awful.spawn("pactl set-sink-mute @DEFAULT_SINK@ toggle")
-        gears.timer.delayed_call(update_volume)
-    end),
-    awful.button({}, 3, function() -- Right click: open audio mixer
-        awful.spawn("pavucontrol")
-    end),
-    awful.button({}, 4, function() -- Scroll up: volume up
-        awful.spawn("pactl set-sink-volume @DEFAULT_SINK@ +5%")
-        gears.timer.delayed_call(update_volume)
-    end),
-    awful.button({}, 5, function() -- Scroll down: volume down
-        awful.spawn("pactl set-sink-volume @DEFAULT_SINK@ -5%")
-        gears.timer.delayed_call(update_volume)
-    end)
-))
+-- ALSA volume bar
+theme.volume = lain.widget.alsabar({
+    notification_preset = { font = "Monospace 9"},
+    --togglechannel = "IEC958,3",
+    width = dpi(80), height = dpi(10), border_width = dpi(0),
+    colors = {
+        background = "#383838",
+        unmute     = "#80CCE6",
+        mute       = "#FF9F9F"
+    },
+})
+theme.volume.bar.paddings = dpi(0)
+theme.volume.bar.margins = dpi(5)
+local volumewidget = wibox.container.background(theme.volume.bar, theme.bg_focus, gears.shape.rectangle)
+volumewidget = wibox.container.margin(volumewidget, dpi(0), dpi(0), dpi(5), dpi(5))
 
 -- CPU
 local cpu_icon = wibox.widget.imagebox(theme.cpu)
@@ -279,22 +246,26 @@ local cpu = lain.widget.cpu({
 local cpubg = wibox.container.background(cpu.widget, theme.bg_focus, gears.shape.rectangle)
 local cpuwidget = wibox.container.margin(cpubg, dpi(0), dpi(0), dpi(5), dpi(5))
 
--- Make CPU widget clickable - shows top processes
-cpuwidget:buttons(my_table.join(awful.button({}, 1, function()
-    awful.spawn("kitty -e htop")
-end)))
-
 -- Net
 local netdown_icon = wibox.widget.imagebox(theme.net_down)
 local netup_icon = wibox.widget.imagebox(theme.net_up)
 local net = lain.widget.net({
     settings = function()
-        widget:set_markup(markup.font("Roboto 1", " ") .. markup.font(theme.font, net_now.received .. " ↓ "
-                          .. net_now.sent .. " ↑") .. markup.font("Roboto 2", " "))
+        widget:set_markup(markup.font("Roboto 1", " ") .. markup.font(theme.font, net_now.received .. " - "
+                          .. net_now.sent) .. markup.font("Roboto 2", " "))
     end
 })
 local netbg = wibox.container.background(net.widget, theme.bg_focus, gears.shape.rectangle)
 local networkwidget = wibox.container.margin(netbg, dpi(0), dpi(0), dpi(5), dpi(5))
+
+-- Weather
+--[[ to be set before use
+theme.weather = lain.widget.weather({
+    --APPID =
+    city_id = 2643743, -- placeholder (London)
+    notification_preset = { font = "Monospace 9", position = "bottom_right" },
+})
+--]]
 
 -- Launcher
 local mylauncher = awful.widget.button({ image = theme.awesome_icon_launcher })
@@ -370,6 +341,7 @@ function theme.at_screen_connect(s)
         { -- Right widgets
             layout = wibox.layout.fixed.horizontal,
             wibox.widget.systray(),
+            --theme.mail.widget,
             bat.widget,
             spr_right,
             musicwidget,
