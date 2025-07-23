@@ -116,7 +116,7 @@ local terminal_cmd = terminal .. " -e "
 local editor       = os.getenv("EDITOR") or "vim"
 local editor_cmd   = terminal .. " -e " .. editor
 local browser      = "brave"
-local prompt       = "rofi -show drun"
+local prompt       = "rofi -show drun --show-icons"
 local file_browser = "thunar"
 
 local vi_focus     = false -- vi-like client focus https://github.com/lcpz/awesome-copycats/issues/275
